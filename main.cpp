@@ -1,9 +1,7 @@
 #include <iostream>
-#include <iomanip>
 #include <fstream>
 #include <sstream>
 #include <tuple>
-#include <iomanip>
 #include <ctime>
 #include <cmath>
 
@@ -11,11 +9,10 @@
 
 using namespace std::literals;
 
-constexpr int dst_length = 10'000; //'是C++14特性
+constexpr int dst_length = 100'000; //'是C++14特性
 constexpr int total_length = dst_length + 100;
 
 void compare_episilon(FixedInteger &result);
-//FixedInteger initialize_big(double x);
 
 template <class T>
 inline T square(const T& x) {
@@ -62,9 +59,6 @@ void BBP_iter(unsigned prec) {
 
 
 int main() {
-    int prec = 10/*有效数字位数*/  + 3 /*留出一些空间*/;
-
-
     {
         //初始化到double最高精度
         auto [a0,b0,t0,p0] = init_iteration();
@@ -72,7 +66,7 @@ int main() {
             << ", p=" << p0 << ", pi=" << (square(a0+b0)/4/t0) << std::endl;
     }
 
-    prec=total_length;
+    int prec=total_length;
     if (prec%2 == 0) prec+=1;
 
     //-----
@@ -100,14 +94,12 @@ int main() {
 
 
     auto pi = [&an,&bn,&tn] (int prec) {
-      //divide1目前只能处理 <1的数，先当做去除小数点，然后再移动小数点
       //an+bn > 1
       auto &&sq = square((an+bn).half());
 
-      std::cout << "pi: " << (sq * FixedInteger::divideOne(tn)).string(std::min(prec,50));
+      std::cout << "pi: " << (sq / tn).string(std::min(prec,50));
       std::cout << std::endl;
     };
-
 
     auto start = clock();
     std::cout << "check:\n";
@@ -117,23 +109,24 @@ int main() {
 
 
     for (int i=1;pn < dst_length;++i) {
-        FixedInteger a = (an+bn).half();
+        FixedInteger a = std::move((an+bn).half());
 
-        FixedInteger b;
-        FixedInteger *ref = &a;
-        auto pRef = std::make_unique<FixedInteger>();
-        auto ckpt_path = "../b"s + std::to_string(i) + ".txt"s;
-        if (i < 10){
-            if (pRef->load_ckpt(ckpt_path,prec)) {
-                pRef->val.resize(prec);
-                ref = pRef.get();
-            }
-            b = (an * bn).sqrt(ref);
-            b.save_ckpt(ckpt_path);
-        }
-        else {
-            b = (an * bn).sqrt(ref);
-        }
+        auto sqrt_start = clock();
+        FixedInteger b = (an * bn).sqrt(&a);
+//        FixedInteger *ref = &a;
+//        auto pRef = std::make_unique<FixedInteger>();
+//        if (i < 0){
+//            auto ckpt_path = "../b"s + std::to_string(i) + ".txt"s;
+//            if (pRef->load_ckpt(ckpt_path,prec)) {
+//                pRef->val.resize(prec);
+//                ref = pRef.get();
+//            }
+//            b = b.sqrt(ref);
+//            b.save_ckpt(ckpt_path);
+//        }
+//        else {
+//            b = b.sqrt(ref);
+//        }
 
         //算术平均>=几何平均，所以an>a_n+1>bn
         tn = tn - (square(an-a) * pn);
@@ -145,7 +138,9 @@ int main() {
 //        std::cout << an.string(15, false) << ' ' << bn.string(15, false) << ' ' << tn.string(15, false) << ' ' << pn << "\n";
 //        pi(std::min(prec,50));
 
-        printf("pRef = %d, time: %.3lf s\n",pn,(clock() - start)/1000.0);
+        auto end = clock();
+        printf("p = %d, time: %.3lf s, sqrt time: %.3lf s\n",pn,
+                                        (end - start)/1000.0, (end - sqrt_start)/1000.0);
     }
 
 
@@ -155,20 +150,6 @@ int main() {
 
     return 0;
 }
-
-
-FixedInteger initialize_big(double x) {
-    std::string str;
-    std::stringstream ss;
-    ss << std::setprecision(18) << x;
-    ss >> str;
-    str.erase(1,1);
-
-    FixedInteger t;
-    t.setValue(str);
-    return std::move(t);
-}
-
 
 void compare_episilon(FixedInteger &result) {
 

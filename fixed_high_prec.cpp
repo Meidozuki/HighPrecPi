@@ -8,6 +8,11 @@
 #include <array>
 #include <sstream>
 #include <fstream>
+#include <chrono>
+
+#include "specified_divide.cpp"
+
+using namespace std::chrono;
 
 // -----
 // I/Os
@@ -202,8 +207,7 @@ FixedInteger FixedInteger::operator*(const FixedInteger &ano) const {
     return std::move(re);
 }
 
-template<class T>
-inline int find_quotient(const T &residual, std::array<T,10> &prod) {
+inline int find_quotient(long long residual, std::array<long long,10> &prod) {
     int factor;
     for (factor = 1;factor <= 9;++factor) {
         if (prod.at(factor) > residual) {
@@ -213,6 +217,7 @@ inline int find_quotient(const T &residual, std::array<T,10> &prod) {
     factor-=1;
     return factor;
 }
+
 
 FixedInteger FixedInteger::divideOne(long long int dividor, unsigned int precision) {
     if (dividor < 0) {
@@ -279,7 +284,7 @@ FixedInteger FixedInteger::divideOne(const FixedInteger &dividor) {
     residual.val.at(0) = 1;
     residual.val.reserve(residual.size() + dividor.size());
     for (;idx < dividor.size();++idx) {
-        int factor = find_quotient(residual,prod);
+        int factor = find_quotient(residual,0,prod);
 
         re.val.at(idx) = factor;
         residual = residual - prod.at(factor);
@@ -297,6 +302,7 @@ FixedInteger FixedInteger::operator/(const FixedInteger &ano) const {
         throw std::runtime_error("FixedInt trying to divide 2 int with different size\n");
     }
 
+
     int len;
     std::array<FixedInteger,10> prod;
     {
@@ -311,25 +317,45 @@ FixedInteger FixedInteger::operator/(const FixedInteger &ano) const {
         prod.at(i) = (prod.at(1) * i);
     }
 
-
     FixedInteger re(size());
-    int idx = 0;
 
     FixedInteger residual;
     int bias = prod.at(1).size();
     residual.val = std::vector<Digit>(val.begin(),val.begin()+bias);
-
     residual.val.reserve(residual.size() + ano.size());
-    for (;idx < ano.size();++idx) {
-        int factor = find_quotient(residual,prod);
 
-        re.val.at(idx) = factor;
-        residual = residual - prod.at(factor);
+    //决速步
+    clock_t time = 0;
+    for (int idx = 0;idx < ano.size();++idx) {
+        if (1) { //特化版 速度没啥区别
+            auto start = std::chrono::steady_clock::now();
+            int factor = find_quotient(residual,idx,prod);
 
+            re.val.at(idx) = factor;
+            //主要在减法
+            residual = std::move(subtract(residual, prod.at(factor), idx));
+            auto end = std::chrono::steady_clock::now();
+//            std:: cout << "divide sub time " << duration_cast<microseconds>(end-start).count() << '\n';
 
-        Digit temp = idx+bias >= size() ? 0 : val.at(idx+bias);
-        residual.val.emplace_back(temp);
-        residual.val.erase(residual.val.begin());
+            Digit temp = idx+bias >= size() ? 0 : val.at(idx+bias);
+            residual.val.emplace_back(temp);
+        }
+        else {
+            auto start = std::chrono::steady_clock::now();
+            int factor = find_quotient(residual,0,prod);
+
+            re.val.at(idx) = factor;
+            residual = residual - prod.at(factor);
+            auto end = std::chrono::steady_clock::now();
+            std:: cout << "divide sub time " << duration_cast<microseconds>(end-start).count() << '\n';
+
+            Digit temp = idx+bias >= size() ? 0 : val.at(idx+bias);
+            residual.val.emplace_back(temp);
+            // 这里用错了erase begin
+            residual.val.erase(residual.val.begin());
+            end = std::chrono::steady_clock::now();
+            std:: cout << "divide realloc time " << duration_cast<microseconds>(end-start).count() << '\n';
+        }
     }
 
     return std::move(re);
@@ -343,14 +369,15 @@ FixedInteger FixedInteger::sqrt(std::optional<const FixedInteger *> ref) {
     }
     guess.val.resize(size());
 
-    int prec =   (val.size() - 2);
+    int prec = (val.size() - 2);
 
     int t=0;
     while (true) {
+        auto start = clock();
 //        FixedInteger &&fix = (*this) * divideOne(guess);
         FixedInteger &&fix = (*this) / guess;
+//        std:: cout << "sqrt:: divide time " << (clock()-start) << '\n';
 //        std::cout << guess.string() << '\n' << fix.string() << std::endl;
-//        _sleep(100);
 
         int cnt=0;
         for (auto p=guess.val.cbegin(),pano=fix.val.cbegin();
@@ -361,9 +388,9 @@ FixedInteger FixedInteger::sqrt(std::optional<const FixedInteger *> ref) {
         }
         if (cnt >= prec) break;
 
-        guess = (guess + fix).half();
+        guess = std::move((guess + fix).half());
         t++;
     }
     std::cout << t << std::endl;
-    return guess;
+    return std::move(guess);
 }

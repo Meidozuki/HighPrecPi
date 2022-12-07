@@ -1,0 +1,7 @@
+cmake-build-debug
+cmake-build-release
+.idea
+unittest/googletest-release-1.12.1
+bigint-deque.*
+pi_*.txt
+profile.lsp
